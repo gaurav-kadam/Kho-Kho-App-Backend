@@ -6,7 +6,8 @@ from .views import (
     PauseMatchAPI,
     ResumeMatchAPI,
     LiveMatchAPI,
-    AssignOfficialAPI
+    AssignOfficialAPI,
+    AssignMatchPlayerAPI
 )
 urlpatterns = [
     path("start/<int:match_id>/", StartMatchAPI.as_view()),
@@ -16,6 +17,8 @@ urlpatterns = [
     path("state/<int:match_id>/", MatchStateAPI.as_view()),
     path("live/<int:match_id>/", LiveMatchAPI.as_view()),
     path("assign-official/", AssignOfficialAPI.as_view()),
+    path("assign-player/", AssignMatchPlayerAPI.as_view()),
+
 
 ]
 
