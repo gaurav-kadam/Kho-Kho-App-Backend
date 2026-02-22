@@ -9,12 +9,14 @@ from common.responses import error_response, success_response
 from teams.models import Team
 from players.models import Player
 from matches.models import Match
-from common.permissions import IsMatchUmpireOrAdmin
+from common.permissions import IsMatchOfficialWithRole
 from .services import create_score_event, get_match_scoreboard
 
 
 class CreateScoreEventAPI(APIView):
-    permission_classes = [IsAuthenticated, IsMatchUmpireOrAdmin]
+    permission_classes = [IsAuthenticated, IsMatchOfficialWithRole]
+
+    IsMatchOfficialWithRole.allowed_roles = ["UMPIRE"]
 
     def post(self, request):
         try:

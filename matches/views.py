@@ -1,3 +1,5 @@
+from re import match
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -14,14 +16,21 @@ from scoring.services import get_match_scoreboard
 from .models import MatchOfficial
 from users.models import User
 
+from .models import MatchPlayer
+from players.models import Player
 
 
+from common.permissions import (
+    IsMatchOfficialOrAdmin,
+    IsMatchOfficialWithRole
+)
 
-from common.permissions import IsMatchUmpireOrAdmin
 
 
 class StartMatchAPI(APIView):
-    permission_classes = [IsAuthenticated, IsMatchUmpireOrAdmin]
+    permission_classes = [IsAuthenticated, IsMatchOfficialWithRole]
+    IsMatchOfficialWithRole.allowed_roles = ["UMPIRE"]
+
 
     def post(self, request, match_id):
         try:
@@ -46,7 +55,9 @@ class StartMatchAPI(APIView):
 
 
 class EndMatchAPI(APIView):
-    permission_classes = [IsAuthenticated, IsMatchUmpireOrAdmin]
+    permission_classes = [IsAuthenticated, IsMatchOfficialWithRole]
+    IsMatchOfficialWithRole.allowed_roles = ["UMPIRE"]
+
 
     def post(self, request, match_id):
         try:
@@ -70,7 +81,7 @@ class EndMatchAPI(APIView):
 
 
 class MatchStateAPI(APIView):
-    permission_classes = [IsAuthenticated,IsMatchUmpireOrAdmin]
+    permission_classes = [IsAuthenticated, IsMatchOfficialOrAdmin]
 
     def get(self, request, match_id):
         try:
@@ -86,7 +97,8 @@ class MatchStateAPI(APIView):
 
 
 class PauseMatchAPI(APIView):
-    permission_classes = [IsAuthenticated, IsMatchUmpireOrAdmin]
+    permission_classes = [IsAuthenticated, IsMatchOfficialWithRole]
+    IsMatchOfficialWithRole.allowed_roles = ["UMPIRE"]
 
     def post(self, request, match_id):
         try:
@@ -100,7 +112,8 @@ class PauseMatchAPI(APIView):
 
 
 class ResumeMatchAPI(APIView):
-    permission_classes = [IsAuthenticated, IsMatchUmpireOrAdmin]
+    permission_classes = [IsAuthenticated, IsMatchOfficialWithRole]
+    IsMatchOfficialWithRole.allowed_roles = ["UMPIRE"]
 
     def post(self, request, match_id):
         try:
@@ -121,6 +134,16 @@ class LiveMatchAPI(APIView):
             match = Match.objects.get(id=match_id)
 
             scoreboard = get_match_scoreboard(match)
+            
+            result_data = None
+
+            if hasattr(match, "result"):
+                result_data = {
+                "team_a_score": match.result.team_a_score,
+                "team_b_score": match.result.team_b_score,
+                "winner": match.result.winner.name if match.result.winner else None,
+                "is_draw": match.result.is_draw
+            }
 
             return Response({
                 "match_id": match.id,
@@ -130,6 +153,7 @@ class LiveMatchAPI(APIView):
                 "team_a_score": scoreboard.get("team_a_score", 0),
                 "team_b_score": scoreboard.get("team_b_score", 0),
                 "events": scoreboard.get("events", []),
+                "result": result_data,
             })
 
         except Match.DoesNotExist:
@@ -139,10 +163,10 @@ class AssignOfficialAPI(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # Only ADMIN can assign
+
         if request.user.role != "ADMIN":
             return Response(
-                {"error": "Only admin can assign officials"},
+                {"error": "Only ADMIN can assign officials"},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -156,8 +180,8 @@ class AssignOfficialAPI(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Validate role
         allowed_roles = dict(MatchOfficial.OFFICIAL_ROLE_CHOICES).keys()
+
         if role not in allowed_roles:
             return Response(
                 {"error": "Invalid role"},
@@ -166,22 +190,18 @@ class AssignOfficialAPI(APIView):
 
         try:
             match = Match.objects.get(id=match_id)
+            user = User.objects.get(id=user_id)
         except Match.DoesNotExist:
             return Response({"error": "Match not found"}, status=404)
-
-        try:
-            user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=404)
 
-        # Prevent duplicate assignment
         if MatchOfficial.objects.filter(match=match, user=user).exists():
             return Response(
-                {"error": "Official already assigned to this match"},
+                {"error": "Official already assigned"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Allow maximum 2 umpires
         if role == "UMPIRE":
             umpire_count = MatchOfficial.objects.filter(
                 match=match,
@@ -190,11 +210,10 @@ class AssignOfficialAPI(APIView):
 
             if umpire_count >= 2:
                 return Response(
-                    {"error": "Only 2 umpires allowed per match"},
+                    {"error": "Maximum 2 umpires allowed"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-        # Create assignment
         MatchOfficial.objects.create(
             match=match,
             user=user,
@@ -205,3 +224,68 @@ class AssignOfficialAPI(APIView):
             {"message": "Official assigned successfully"},
             status=status.HTTP_201_CREATED
         )
+
+class AssignMatchPlayerAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+
+        if request.user.role != "ADMIN":
+            return Response(
+                {"error": "Only admin can assign match players"},
+                status=403
+            )
+
+        match_id = request.data.get("match")
+        player_id = request.data.get("player")
+        status_value = request.data.get("status", "PLAYING")
+
+        if not all([match_id, player_id]):
+            return Response(
+                {"error": "match and player are required"},
+                status=400
+            )
+
+        try:
+            match = Match.objects.get(id=match_id)
+            player = Player.objects.get(id=player_id)
+
+            MatchPlayer.objects.create(
+                match=match,
+                player=player,
+                status=status_value
+            )
+
+            return Response(
+                {"message": "Player assigned to match successfully"},
+                status=201
+            )
+
+        except Match.DoesNotExist:
+            return Response({"error": "Match not found"}, status=404)
+
+        except Player.DoesNotExist:
+            return Response({"error": "Player not found"}, status=404)
+
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)
+        
+class TournamentStandingsAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, tournament_id):
+
+        from tournaments.models import Tournament
+        from .services import get_tournament_standings
+
+        try:
+            tournament = Tournament.objects.get(id=tournament_id)
+        except Tournament.DoesNotExist:
+            return Response({"error": "Tournament not found"}, status=404)
+
+        table = get_tournament_standings(tournament)
+
+        return Response({
+            "tournament": tournament.name,
+            "standings": table
+        })
