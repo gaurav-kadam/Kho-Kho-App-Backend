@@ -1,5 +1,8 @@
-from django.urls import path
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+
 from .views import (
+    MatchResultViewSet,
     StartMatchAPI,
     EndMatchAPI,
     MatchStateAPI,
@@ -9,6 +12,10 @@ from .views import (
     AssignOfficialAPI,
     AssignMatchPlayerAPI
 )
+
+router = DefaultRouter()
+router.register(r'match-results', MatchResultViewSet)
+
 urlpatterns = [
     path("start/<int:match_id>/", StartMatchAPI.as_view()),
     path("pause/<int:match_id>/", PauseMatchAPI.as_view()),
@@ -18,6 +25,7 @@ urlpatterns = [
     path("live/<int:match_id>/", LiveMatchAPI.as_view()),
     path("assign-official/", AssignOfficialAPI.as_view()),
     path("assign-player/", AssignMatchPlayerAPI.as_view()),
+    path('', include(router.urls)),
 
 
 ]

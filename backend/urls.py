@@ -25,9 +25,12 @@ from rest_framework_simplejwt.views import (
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/login', include('loginapp.urls')),
+    path('api/', include('tournaments.urls')),
+    path('api/', include('teams.urls')),
+    path('api/', include('players.urls')),
     path('api/scoring/', include('scoring.urls')),
     path('api/auth/', include('users.urls')),
-    path('api/matches/', include('matches.urls')),
+    path('api/', include('matches.urls')),
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 

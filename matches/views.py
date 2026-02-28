@@ -1,4 +1,10 @@
 from re import match
+from time import timezone
+
+from django.db.models import Q, Sum, Count, Case, When, IntegerField
+from teams.models import Team
+from matches.models import MatchResult
+from rest_framework import viewsets
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -12,6 +18,9 @@ from .services import end_match
 from .services import get_match_state
 from .services import pause_match, resume_match
 from scoring.services import get_match_scoreboard
+
+from .models import Match, MatchResult
+from .serializers import MatchResultSerializer
 
 from .models import MatchOfficial
 from users.models import User
@@ -289,3 +298,32 @@ class TournamentStandingsAPI(APIView):
             "tournament": tournament.name,
             "standings": table
         })
+    
+class MatchResultViewSet(viewsets.ModelViewSet):
+    queryset = MatchResult.objects.all()
+    serializer_class = MatchResultSerializer
+    permission_classes = [IsAuthenticated]  # adjust as needed
+
+    def create(self, request, *args, **kwargs):
+        # Ensure match is not already completed
+        match_id = request.data.get('match')
+        try:
+            match = Match.objects.get(id=match_id)
+        except Match.DoesNotExist:
+            return Response({'error': 'Match not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if match.status == 'COMPLETED':
+            return Response({'error': 'Match already completed'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Save result
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        # Update match status and ended_at
+        match.status = 'COMPLETED'
+        match.ended_at = timezone.now()
+        match.save()
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)

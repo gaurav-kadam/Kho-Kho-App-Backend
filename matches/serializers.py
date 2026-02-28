@@ -1,12 +1,13 @@
 # matches/serializers.py
+from .models import Match, MatchResult
+
 from rest_framework import serializers
-from .models import Match
+from .models import Match, MatchResult  # Make sure MatchResult is imported
 
 class MatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Match
         fields = '__all__'
-
 
 class MatchResultSerializer(serializers.ModelSerializer):
     class Meta:
