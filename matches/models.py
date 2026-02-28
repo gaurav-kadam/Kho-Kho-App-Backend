@@ -37,6 +37,8 @@ class Match(models.Model):
     )
 
     match_number = models.PositiveIntegerField()
+
+    round_number = models.PositiveIntegerField(null=True, blank=True, help_text="Round number (for knockout stages)")
     
     venue = models.CharField(max_length=200)
 
